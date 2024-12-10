@@ -1,0 +1,118 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="config_package" default="$(optenv ROBOT_NAVIGATION_CONFIG_PACKAGE summit_xl_navigation)"/>
+  <arg name="config_folder" default="config"/>
+  <arg name="config_path" default="$(eval find(config_package) + '/' + config_folder)"/>
+
+  <arg name="id_robot" default="robot"/>
+  <arg name="prefix" default="$(arg id_robot)_"/>
+  
+  <!-- Topics argumments -->
+  <arg name="cmd_vel_topic" default="/robot/robotnik_base_control/cmd_vel"/> <!-- publisher-->
+  <arg name="odom_topic" default="/robot/robotnik_base_control/odom"/>
+  <arg name="total_scan_topic" default="/robot/scan"/>
+  <arg name="front_rgbd_to_scan_topic" default="$(optenv ROBOT_NAVIGATION_FRONT_RGBD_TO_SCAN front_rgbd_camera/point_cloud_scan_filtered)"/>
+ 
+  <!-- Frames arguments -->
+  <arg name="global_frame" default="$(arg prefix)map"/>
+  <arg name="odom_frame" default="$(arg prefix)odom"/>
+  <arg name="base_frame" default="$(arg prefix)base_link"/>
+
+  <arg name="differential_robot" default="$(optenv ROBOT_DIFFERENTIAL_KINEMATICS true)"/>
+  <arg if="$(arg differential_robot)" name="kinematics" value="diff"/>   <!-- diff로 쓰임-->
+  <arg unless="$(arg differential_robot)" name="kinematics" value="omni"/>
+  <arg name="local_planner" default="dwa"/>
+  <arg name="launch_amcl" default="false"/>
+
+
+
+  <include file="$(find summit_xl_navigation)/launch/3d_move_base_$(arg local_planner).launch">
+    <arg name="config_path" value="$(arg config_path)"/>
+    <arg name="id_robot" value="$(arg id_robot)"/>
+    
+    <!-- Topics argumments -->
+    <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
+    <arg name="odom_topic" value="/localization"/>
+    <arg name="total_scan_topic" value="/robot/scan"/>
+    <arg name="front_rgbd_to_scan_topic" value="$(arg front_rgbd_to_scan_topic)"/>
+  
+    <!-- Frames arguments -->
+    <arg name="global_frame" value="$(arg global_frame)"/>
+    <arg name="odom_frame" value="$(arg odom_frame)"/>
+    <arg name="base_frame" value="$(arg base_frame)"/>
+
+    <arg name="kinematics" value="$(arg kinematics)"/>
+  </include>
+
+  <arg name="map_file" value="3rd_floor_retouched/3rd_floor_retouched.yaml"/>
+  <include file="$(find summit_xl_localization)/launch/map_server.launch">
+    <arg name="prefix" value="$(arg prefix)"/>
+    <arg name="map_file" value="$(arg map_file)"/>
+  </include>
+
+  <include if="$(arg launch_amcl)" file="$(find summit_xl_localization)/launch/amcl.launch">
+    <arg name="prefix" value="$(arg prefix)"/>
+    <arg if="$(arg differential_robot)" name="odom_model_type" value="diff"/>
+    <arg unless="$(arg differential_robot)" name="odom_model_type" value="omni"/>
+    <arg name="global_frame" value="$(arg prefix)map"/>
+    <arg name="odom_frame" value="$(arg prefix)odom"/>
+    <arg name="base_frame" value="$(arg prefix)base_link"/>
+    <arg name="x_init_pose" value="0"/>
+    <arg name="y_init_pose" value="0"/>
+    <arg name="z_init_pose" value="0"/>
+  </include>
+
+
+  <!-- Run pointcloud_to_laser node: lidar_front -->
+  <node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node" name="pointcloud_to_laserscan"  >
+    <remap from="cloud_in" to="/velodyne_points"/>
+    <remap from="scan" to="/robot/scan"/>
+    <rosparam>
+      target_frame: velodyne_base_link 
+      transform_tolerance: 0.01
+      min_height: -0.3
+      max_height: 1.3
+
+      angle_min: -3.141591 
+      angle_max: 3.141591 
+      angle_increment: 0.0087 
+      scan_time: 1.0
+      range_min: 0.0
+      range_max: 100.0
+      use_inf: true
+      concurrency_level: 1
+    </rosparam>
+  </node>
+
+  <!-- Run pointcloud_to_laser node: lidar_top-->
+  <!--node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node" name="pointcloud_to_laserscan"  >
+    <remap from="cloud_in" to="/velodyne_points"/>
+    <remap from="scan" to="/robot/scan"/>
+    <rosparam>
+      target_frame: camera_link 
+      transform_tolerance: 0.01
+      min_height: -1.2
+      max_height: 0.3
+
+      angle_min: -3.141591 
+      angle_max: 3.141591 
+      angle_increment: 0.0087 
+      scan_time: 1.0
+      range_min: 0.3
+      range_max: 100.0
+      use_inf: true
+      concurrency_level: 1
+    </rosparam>
+  </node-->
+
+  <!-- Launch rviz -->
+  <arg name="file_rviz" default="nav"/>
+  <node name="rviz" pkg="rviz" type="rviz" required="true" args="-d $(find summit_xl_navigation)/config_rviz/$(arg file_rviz).rviz"/>
+
+  <!-- Publish static tf between 3d and 2d map-->
+  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_robot_map_broadcaster" args="-29 -56 0 0 0 0 map robot_map" /> -->
+  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_robot_map_broadcaster" args="-30 -76 0 0 0 0 map robot_map" /> -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_robot_map_broadcaster" args="-34 -71 0 0 0 0 map robot_map" />
+  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_robot_map_broadcaster" args="-51.1 -51.2 0 0 0 0 map robot_map" /> -->
+
+</launch>
